@@ -5,7 +5,7 @@ import (
 )
 
 // generateSecretlessSidecarConfig generates PatchConfig from a given secretlessConfigMapName
-func generateSecretlessSidecarConfig(secretlessConfigMapName, conjurConnConfigMapName, conjurAuthConfigMapName string) *PatchConfig {
+func generateSecretlessSidecarConfig(secretlessConfigMapName, conjurConnConfigMapName, conjurAuthConfigMapName, ServiceAccountTokenVolumeName string) *PatchConfig {
     envvars := []corev1.EnvVar{
         envVarFromFieldPath("MY_POD_NAME", "metadata.name"),
         envVarFromFieldPath("MY_POD_NAMESPACE", "metadata.namespace"),
@@ -34,6 +34,11 @@ func generateSecretlessSidecarConfig(secretlessConfigMapName, conjurConnConfigMa
                         Name:      "secretless-config",
                         ReadOnly:  true,
                         MountPath: "/etc/secretless",
+                    },
+                    {
+                        Name:      ServiceAccountTokenVolumeName,
+                        ReadOnly:  true,
+                        MountPath: "/var/run/secrets/kubernetes.io/serviceaccount",
                     },
                 },
                 Env: envvars,

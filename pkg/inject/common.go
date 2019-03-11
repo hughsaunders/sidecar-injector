@@ -1,6 +1,7 @@
 package inject
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -73,4 +74,22 @@ func getAnnotation(metadata *metav1.ObjectMeta, key string) (string, error) {
 		return "", fmt.Errorf("missing annotation %s", key)
 	}
 	return value, nil
+}
+
+/**
+ * Given a pod, return the name of the volume that contains
+ * the service account token. VolumeMounts are used instead
+ * of volumes so that the mount path can be matched on.
+ * Otherwise a name pattern match would be required and
+ * that could have unexpected results.
+ */
+func getServiceAccountTokenVolumeName(pod *corev1.Pod) (string, error){
+	for _, container := range pod.Spec.Containers {
+		for _, volumeMount := range container.VolumeMounts {
+			if volumeMount.MountPath == "/var/run/secrets/kubernetes.io/serviceaccount" {
+				return volumeMount.Name, nil
+			}
+		}
+	}
+	return "", errors.New("Service account token volume mount not found")
 }

@@ -76,6 +76,7 @@ func (whsvr *WebhookServer) mutate(ar *v1beta1.AdmissionReview) *v1beta1.Admissi
 	if err := json.Unmarshal(req.Object.Raw, &pod); err != nil {
 		return failWithResponse(fmt.Sprintf("Could not unmarshal raw object: %v", err))
 	}
+	glog.Info(fmt.Sprintf("Pod: %+v"), pod)
 
 	glog.Infof("AdmissionReview for Kind=%v, Namespace=%v Name=%v (%v) UID=%v rfc6902PatchOperation=%v UserInfo=%v",
 		req.Kind, req.Namespace, req.Name, pod.Name, req.UID, req.Operation, req.UserInfo)
@@ -104,10 +105,13 @@ func (whsvr *WebhookServer) mutate(ar *v1beta1.AdmissionReview) *v1beta1.Admissi
         conjurConnConfigMapName, _ := getAnnotation(&pod.ObjectMeta, annotationConjurConnConfigKey)
         conjurAuthConfigMapName, _ := getAnnotation(&pod.ObjectMeta, annotationConjurAuthConfigKey)
 
+        ServiceAccountTokenVolumeName, _ := getServiceAccountTokenVolumeName(&pod)
+
         sidecarConfig = generateSecretlessSidecarConfig(
             secretlessConfigMapName,
             conjurConnConfigMapName,
-            conjurAuthConfigMapName)
+            conjurAuthConfigMapName,
+            ServiceAccountTokenVolumeName)
         break;
     case "authenticator":
         conjurAuthConfigMapName, err := getAnnotation(&pod.ObjectMeta, annotationConjurAuthConfigKey)
