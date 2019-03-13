@@ -97,7 +97,7 @@ func (whsvr *WebhookServer) mutate(ar *v1beta1.AdmissionReview) *v1beta1.Admissi
     var sidecarConfig *PatchConfig
     switch injectType {
     case "secretless":
-        secretlessConfigMapName, err := getAnnotation(&pod.ObjectMeta, annotationSecretlessConfigKey)
+        secretlessConfig, err := getAnnotation(&pod.ObjectMeta, annotationSecretlessConfigKey)
         if err != nil {
             return failWithResponse(fmt.Sprintf("Mutation failed for pod %s, in namespace %s, due to %s", pod.Name, req.Namespace, err.Error()))
         }
@@ -108,7 +108,7 @@ func (whsvr *WebhookServer) mutate(ar *v1beta1.AdmissionReview) *v1beta1.Admissi
         ServiceAccountTokenVolumeName, _ := getServiceAccountTokenVolumeName(&pod)
 
         sidecarConfig = generateSecretlessSidecarConfig(
-            secretlessConfigMapName,
+            secretlessConfig,
             conjurConnConfigMapName,
             conjurAuthConfigMapName,
             ServiceAccountTokenVolumeName)

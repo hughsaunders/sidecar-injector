@@ -126,7 +126,7 @@ spec:
       containers:
         - name: cyberark-sidecar-injector
           #image: cyberark/sidecar-injector:latest
-          image: hughsaunders/ca-sci-debug:latest
+          image: hughsaunders/ca-sci-combined:latest
           imagePullPolicy: Always
           args:
             - -tlsCertFile=/etc/webhook/certs/cert.pem

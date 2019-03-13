@@ -2,10 +2,12 @@ package inject
 
 import (
     corev1 "k8s.io/api/core/v1"
+    "strings"
+    "fmt"
 )
 
 // generateSecretlessSidecarConfig generates PatchConfig from a given secretlessConfigMapName
-func generateSecretlessSidecarConfig(secretlessConfigMapName, conjurConnConfigMapName, conjurAuthConfigMapName, ServiceAccountTokenVolumeName string) *PatchConfig {
+func generateSecretlessSidecarConfig(secretlessConfig, conjurConnConfigMapName, conjurAuthConfigMapName, ServiceAccountTokenVolumeName string) *PatchConfig {
     envvars := []corev1.EnvVar{
         envVarFromFieldPath("MY_POD_NAME", "metadata.name"),
         envVarFromFieldPath("MY_POD_NAMESPACE", "metadata.namespace"),
@@ -22,30 +24,54 @@ func generateSecretlessSidecarConfig(secretlessConfigMapName, conjurConnConfigMa
             envVarFromConfigMap("CONJUR_AUTHN_LOGIN", conjurAuthConfigMapName))
     }
 
-    return &PatchConfig{
-        Containers: []corev1.Container{
-            {
-                Name:            "secretless",
-                Image:           "cyberark/secretless-broker:latest",
-                Args:            []string{"-f", "/etc/secretless/secretless.yml"},
-                ImagePullPolicy: "Always",
-                VolumeMounts: []corev1.VolumeMount{
-                    {
-                        Name:      "secretless-config",
-                        ReadOnly:  true,
-                        MountPath: "/etc/secretless",
-                    },
-                    {
-                        Name:      ServiceAccountTokenVolumeName,
-                        ReadOnly:  true,
-                        MountPath: "/var/run/secrets/kubernetes.io/serviceaccount",
-                    },
-                },
-                Env: envvars,
-            },
+    // Allow configmgr#configspec in the SecretlessConfig annotation
+    var configMgr string
+    var configSpec string
+    var secretlessConfigMapName string
+    secretlessConfigPath := "/etc/secretless/secretless.yml"
+    volumes := []corev1.Volume{}
+
+    // Always mount the service account token
+    volumeMounts := []corev1.VolumeMount{
+        {
+            Name:      ServiceAccountTokenVolumeName,
+            ReadOnly:  true,
+            MountPath: "/var/run/secrets/kubernetes.io/serviceaccount",
         },
-        Volumes: []corev1.Volume{
-            {
+    }
+
+    // Three options for secretlessConfig
+    // 1. configmapName
+    // 2. configfile#configmapname
+    // 3. k8s/crd#crdName
+
+    // #2 Can't be passed straight through to the broker as its
+    // expecting configfile#fspath
+
+    if strings.Contains(secretlessConfig, "#"){
+        // configmgr#configspec
+        parts := strings.Split(secretlessConfig, "#")
+        configMgr = parts[0]
+        configSpec = parts[1]
+
+        // option 2
+        if configMgr == "configfile"{
+            secretlessConfigMapName = configSpec
+            configSpec = secretlessConfigPath
+        }
+    } else {
+        // option 1
+        // Old format, contains config map name only.
+        configMgr = "configfile"
+        secretlessConfigMapName = secretlessConfig
+        configSpec = secretlessConfigPath
+    }
+
+    // if configMgr is k8s/crd, no further config is required.
+    if configMgr == "configfile" {
+
+        // Add configmap volume
+        volumes = append(volumes, corev1.Volume{
                 Name: "secretless-config",
                 VolumeSource: corev1.VolumeSource{
                     ConfigMap: &corev1.ConfigMapVolumeSource{
@@ -55,6 +81,30 @@ func generateSecretlessSidecarConfig(secretlessConfigMapName, conjurConnConfigMa
                     },
                 },
             },
+        )
+
+        // add configmap mount
+        volumeMounts = append(volumeMounts, corev1.VolumeMount{
+                Name:      "secretless-config",
+                ReadOnly:  true,
+                MountPath: "/etc/secretless",
+            },
+        )
+    }
+
+    containers := []corev1.Container{
+        {
+            Name:            "secretless",
+            Image:           "cyberark/secretless-broker:latest",
+            Args:            []string{"-config-mgr", fmt.Sprintf("%s#%s", configMgr, configSpec)},
+            ImagePullPolicy: "Always",
+            VolumeMounts: volumeMounts,
+            Env: envvars,
         },
+    }
+
+    return &PatchConfig{
+        Containers: containers,
+        Volumes: volumes,
     }
 }
